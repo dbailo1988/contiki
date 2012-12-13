@@ -1,0 +1,1 @@
+hcproxy_src = mapmem.c http-common.c coap-common.c hcproxy.c
