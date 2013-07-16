@@ -81,6 +81,7 @@
     multicast implementation
 */
 #include "net/multicast6/pim.h"
+#include "net/multicast6/mld6.h"
 
 #include <string.h>
 
@@ -1436,6 +1437,15 @@ uip_process(uint8_t flag)
 #if UIP_IPV6_MULTICAST
     case ICMP6_MULTICAST:
         pim_control_input();
+        break;
+    case ICMP6_MLD_QUERY:
+        mld_query_in();
+        break;
+    case ICMP6_MLD_REPORT:
+        mld_report_in();
+        break;
+    case ICMP6_MLD_DONE:
+        mld_done_in();
         break;
 #endif /*UIP_IPV6_MULTICAST */
     case ICMP6_ECHO_REQUEST:

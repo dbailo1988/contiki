@@ -46,6 +46,7 @@ struct mld6_listen_group {
 	uint8_t state;
 	uip_ipaddr_t mcast_group;
 	uip_ipaddr_t source; /* Source-filthering*/
+	uip_ipaddr_t preferred_parent; /* from which link-local router receive de packet */
 	struct ctimer *delay_timer; /* [0, Max.Respons.Delay] */
 };
 
@@ -56,6 +57,7 @@ typedef struct mld6_listen_group mld6_listen_group_t;
 struct mcast_group {
 	int used;
 	uip_ipaddr_t mcast_group;
+	uip_ipaddr_t source;
 	uint8_t state;
 	struct ctimer *timer;
 	struct ctimer *rtx_timer;
@@ -69,32 +71,34 @@ typedef struct mcast_group mcast_group_t;
 
 void mld_gen_query();
 void mld_mas_query(uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr);
-void mld_report(uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr);
-void mld_done(uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr);
+void mld_report(uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr, uip_ipaddr_t *preferred_parent);
+void mld_done(uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr, uip_ipaddr_t *preferred_parent);
 
 /*
  *   Functions to work with Multicast groups in routers
  */
 
+#ifdef UIP_CONF_ROUTER
 mcast_group_t *mcast_group_new(uip_ipaddr_t *group_addr);
-mcast_group_t *mcast_group_find (uip_ipaddr_t *group_addr);
-
+mcast_group_t *mcast_group_find (uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr);
+void print_mld_router_table();
+#endif
 /*
  *   Functions to work with listeners_group in nodes
  */
-
-mld6_listen_group_t *new_listener(uip_ipaddr_t *group_addr, uip_ipaddr_t *source);
+#ifdef RPL_CONF_LEAF_ONLY
+mld6_listen_group_t *new_listener(uip_ipaddr_t *group_addr, uip_ipaddr_t *source, uip_ipaddr_t *preferred_parent);
 mld6_listen_group_t *find_listener (uip_ipaddr_t *group_addr, uip_ipaddr_t *source);
+int erase_listener (uip_ipaddr_t *group_addr, uip_ipaddr_t *source, uip_ipaddr_t *preferred_parent);
+void print_mld_node_table();
+#endif
 
 /*
  * 	Handlers for MLD messages
  */
 
-void mld_router_handler();
-void mld_node_handler();
-void mld_query_node_in();
-void mld_report_node_in();
-void mld_report_router_in();
-void mld_done_router_in();
+void mld_query_in();
+void mld_report_in();
+void mld_done_in();
 
 #endif /* __MLD6_H__ */
