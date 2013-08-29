@@ -6,8 +6,11 @@
 #undef UIP_CONF_DS6_ROUTE_NBU
 #define UIP_CONF_DS6_ROUTE_NBU   10
 
+#undef UIP_CONF_ROUTER
+#define UIP_CONF_ROUTER 1
+
 #undef RPL_CONF_LEAF_ONLY
-#define RPL_CONF_LEAF_ONLY 1 
+#define RPL_CONF_LEAF_ONLY 0
 
 #undef QUEUEBUF_CONF_NUM
 #define QUEUEBUF_CONF_NUM               4

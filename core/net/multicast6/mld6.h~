@@ -1,10 +1,3 @@
-/**
- * \file
- *         Multicast Listener Discovery protocol library
- *
- * \author Daniel Bailo <dbailo1988@gmail.com>
- *
- */
 #ifndef __MLD6_H__
 #define __MLD6_H__
 
@@ -24,16 +17,17 @@
 #define ROBUSTNESS_VARIABLE 2
 #define QUERY_INTERVAL 125 /*seconds within periodical general queries*/
 #define QUERY_RESPONSE_INTERVAL 10
-#define MCAST_LISTENER_INTERVAL 260
-/*(ROBUSTNESS_VARIABLE x QUERY_INTERVAL)+ QUERY_RESPONSE_INTERVAL*/
+#define MCAST_LISTENER_INTERVAL (ROBUSTNESS_VARIABLE x QUERY_INTERVAL)+ QUERY_RESPONSE_INTERVAL
 /* time to decide there is no more listeners for an address*/
-#define START_QI 32 /* (QUERY_INTERVAL / 4) */
+#define OTHER_QUERIER_INTERVAL	(ROBUSTNESS_VARIABLE x QUERY_INTERVAL)+ (QUERY_RESPONSE_INTERVAL/2)
+/*time to decide there is no querier routers*/
+#define START_QI (QUERY_INTERVAL/4)
 #define START_COUNT ROBUSTNESS_VARIABLE
-#define LAST_LISTENER_QI 5
+#define LAST_LISTENER_QI 1
 #define COUNT_LAST_LISTENER ROBUSTNESS_VARIABLE
 #define UNSOLICITED REPORT INTERVAL 10
 
-/* host States*/
+/* Node States*/
 
 #define DELAYING_LISTENER 0
 #define IDLE_LISTENER 1
@@ -44,7 +38,7 @@
 #define LISTENERS 1
 #define CHECKING_LISTENERS 2
 
-/* Struct for hosts*/
+/* Struct for nodes*/
 
 struct mld6_listen_group {
 	int used;
@@ -52,29 +46,27 @@ struct mld6_listen_group {
 	uint8_t state;
 	uip_ipaddr_t mcast_group;
 	uip_ipaddr_t source; /* Source-filthering*/
-	uip_ipaddr_t preferred_parent;
-	struct ctimer delay_timer; /* [0, Max.Respons.Delay] */
+	uip_ipaddr_t preferred_parent; /* from which link-local router receive packet */
+	struct ctimer *delay_timer; /* [0, Max.Respons.Delay] */
 };
 
 typedef struct mld6_listen_group mld6_listen_group_t;
 
-/*
- * List or array of mld6_groups, as structs as number of mcast groups listening
- */
+//List or array of mld6_groups, as structs as number of mcast groups listening
 
 struct mcast_group {
 	int used;
 	uip_ipaddr_t mcast_group;
 	uip_ipaddr_t source;
 	uint8_t state;
-	struct ctimer timer;
-	struct ctimer rtx_timer;
+	struct ctimer *timer;
+	struct ctimer *rtx_timer;
 };
 
 typedef struct mcast_group mcast_group_t;
 
 /*
-*    Functions to send MLD packets
+    Functions to send MLD packets
 */
 
 void mld_gen_query();
@@ -92,15 +84,13 @@ mcast_group_t *mcast_group_find (uip_ipaddr_t *group_addr, uip_ipaddr_t *source_
 void print_mld_router_table();
 #endif
 /*
- *   Functions to work with listeners_group in hosts
+ *   Functions to work with listeners_group in nodes
  */
 #ifdef RPL_CONF_LEAF_ONLY
-mld6_listen_group_t *new_listener(uip_ipaddr_t *group_addr, uip_ipaddr_t *source,
-                                    uip_ipaddr_t *preferred_parent);
+mld6_listen_group_t *new_listener(uip_ipaddr_t *group_addr, uip_ipaddr_t *source, uip_ipaddr_t *preferred_parent);
 mld6_listen_group_t *find_listener (uip_ipaddr_t *group_addr, uip_ipaddr_t *source);
-int erase_listener (uip_ipaddr_t *group_addr, uip_ipaddr_t *source,
-                                    uip_ipaddr_t *preferred_parent);
-void print_mld_host_table();
+int erase_listener (uip_ipaddr_t *group_addr, uip_ipaddr_t *source, uip_ipaddr_t *preferred_parent);
+void print_mld_node_table();
 #endif
 
 /*
@@ -110,14 +100,5 @@ void print_mld_host_table();
 void mld_query_in();
 void mld_report_in();
 void mld_done_in();
-
-/*
- *      Callbacks
- */
-
-static void timer_host_expired (void *listen_group);
-static void rtxtimer_expired (void *mcast_group);
-static void timer_group_expired (void *mcast_group);
-
 
 #endif /* __MLD6_H__ */

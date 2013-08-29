@@ -9,6 +9,9 @@
 #undef RPL_CONF_LEAF_ONLY
 #define RPL_CONF_LEAF_ONLY 1 
 
+#undef UIP_CONF_ROUTER
+#define UIP_CONF_ROUTER 0
+
 #undef QUEUEBUF_CONF_NUM
 #define QUEUEBUF_CONF_NUM               4
 

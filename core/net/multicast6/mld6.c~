@@ -1,10 +1,3 @@
-/**
- * \file
- *         Multicast Listener Discovery protocol library
- *
- * \author Daniel Bailo <dbailo1988@gmail.com>
- *
- */
 
 #include "net/uip.h"
 #include "contiki-net.h"
@@ -16,7 +9,7 @@
 #include "sys/ctimer.h"
 
 
-#define DEBUG 0
+#define DEBUG DEBUG_NONE
 
 #include "net/uip-debug.h"
 
@@ -34,14 +27,14 @@
 #endif
 
  /*
- *      return A pseudo-random number between 0 and MRD.
+ * \return A pseudo-random number between 0 and MRD.
  */
 
 unsigned short
 random_time (uint16_t MRD)
 {
         random_init(clock_time());
-        return (random_rand() % (MRD)) + 2;
+        return (random_rand() % (MRD));
 }
 
 /**
@@ -55,9 +48,9 @@ mld_gen_query()
 
 	uip_create_linklocal_allnodes_mcast(&dest_addr);
 
-	PRINTF("MLD: GENERAL QUERY to ");
-	PRINT6ADDR(&dest_addr);
-	PRINTF("\n");
+	printf("MLD: GENERAL QUERY to ");
+	uip_debug_ipaddr_print(&dest_addr);
+	printf("\n");
 
 	uip_icmp6_send(&dest_addr, ICMP6_MLD_QUERY, 0, 0);
 }
@@ -85,7 +78,7 @@ mld_mas_query(uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr)
 	PRINT6ADDR(group_addr);
 	PRINTF(" and source ");
 	PRINT6ADDR(source_addr);
-	PRINTF("\n");
+
 
 	buffer = UIP_ICMP_PAYLOAD;
 	pos = 0;
@@ -115,14 +108,14 @@ mld_report(uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr, uip_ipaddr_t *pr
 	uip_create_linklocal_allnodes_mcast(&dest_addr);
 
 	PRINTF("MLD: MCAST REPORT TO ");
-	PRINT6ADDR(&dest_addr);
-        PRINTF(" G=");
-        PRINT6ADDR(group_addr);
-        PRINTF(" S=");
-        PRINT6ADDR(source_addr);
-        PRINTF(" P= ");
-        PRINT6ADDR(preferred_parent);
-        PRINTF("\n");
+	PRINT6ADDR(dest_addr);
+	PRINTF(" asking for mcast group ");
+	PRINT6ADDR(group_addr);
+	PRINTF(" source ");
+	PRINT6ADDR(source_addr);
+	PRINTF(" and preferred parent ");
+	PRINT6ADDR(preferred_parent);
+
 
 	buffer = UIP_ICMP_PAYLOAD;
 	pos = 0;
@@ -149,17 +142,17 @@ mld_done(uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr, uip_ipaddr_t *pref
         int pos;
         unsigned char *buffer;
 
-        uip_create_linklocal_allrouters_mcast(&dest_addr);
+       // uip_create_linklocal_allrouters_mcast(&dest_addr); /* Not for all, just pref parent enough*/
+        uip_ipaddr_copy(&dest_addr, preferred_parent);
 
         PRINTF("MLD: MCAST DONE TO ");
-        PRINT6ADDR(&dest_addr);
-        PRINTF(" G=");
+        PRINT6ADDR(dest_addr);
+        PRINTF(" for mcast group ");
         PRINT6ADDR(group_addr);
-        PRINTF(" S=");
+        PRINTF(" and source ");
         PRINT6ADDR(source_addr);
-        PRINTF(" P= ");
+        PRINTF(" with preferred parent ");
         PRINT6ADDR(preferred_parent);
-        PRINTF("\n");
 
         buffer = UIP_ICMP_PAYLOAD;
         pos = 0;
@@ -174,53 +167,37 @@ mld_done(uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr, uip_ipaddr_t *pref
 
 }
 
-/*
- *       callback when timer in listener_group (host) expires
- */
+//callback when timer in listener_group (node) expires
 
 static void
-timer_host_expired (void *listen_group)
+timer_node_expired (void *listen_group)
 {
     mld6_listen_group_t *aux = listen_group;
-    aux->mld_flag = 1; /*Set flag, we are the last host*/
-    PRINTF("Timer host expired send report G=");
-    PRINT6ADDR(&aux->mcast_group);
-    PRINTF("\n");
-    aux->state= IDLE_LISTENER;
+    aux ->mld_flag = 1; /*Set flag, we are the last node*/
     mld_report(&aux->mcast_group, &aux->source, &aux->preferred_parent);
 }
 
-/*
- *      callback function when rtx timer expires in router
- */
+//callback function when rtx timer expires in router
 
 static void
 rtxtimer_expired (void *mcast_group)
 {
     mcast_group_t *aux = mcast_group;
-    PRINTF("Send m_a_s query\n");
     mld_mas_query(&aux->mcast_group, &aux->source);
-    ctimer_set(&aux->rtx_timer, LAST_LISTENER_QI * CLOCK_SECOND, rtxtimer_expired, aux);
+    ctimer_reset(aux->rtx_timer);
 }
 
-/*
- *      callback function when timer* expires in router
- */
+//callback function when timer* expires in router
 
 static void
 timer_group_expired (void *mcast_group)
 {
   mcast_group_t *aux = mcast_group;
-  //NOTIFY ROUTING -
-  PRINTF("Timer group expired \n");
+  //notify routing -
   aux->state = NO_LISTENERS;
-  ctimer_stop(&aux->rtx_timer);
+  ctimer_stop(aux->rtx_timer);
 
 }
-
-/**
- * ROUTER MANAGEMENT MULTICAST GROUPS FUNCTIONS
- */
 
 /**
  *      Function to introduce a new mcast_group_t in the table
@@ -239,6 +216,9 @@ mcast_group_new(uip_ipaddr_t *group_addr,uip_ipaddr_t *source_addr)
         aux= &mcast_group_table[i];
         if(aux->used == 0)
         {
+            printf("Antes del memset \n");
+          //  memset(&aux, 0, sizeof(mcast_group_t));
+            printf("despues \n");
             aux->used = 1;
             aux->mcast_group = *group_addr;
             aux->source= *source_addr;
@@ -265,9 +245,8 @@ mcast_group_find (uip_ipaddr_t *group_addr, uip_ipaddr_t *source_addr)
     	aux= &mcast_group_table[i];
         if(aux->used)
         {
-            if((uip_ipaddr_cmp(&aux->mcast_group, group_addr)) && (uip_ipaddr_cmp(&aux->source, source_addr)) )
+            if(uip_ipaddr_cmp(&aux->mcast_group, group_addr) && uip_ipaddr_cmp(&aux->source, source_addr) )
             {
-                PRINTF("Same G and S \n");
                 return aux;
             }
         }
@@ -296,16 +275,14 @@ print_mld_router_table()
 }
 #endif
 /*
- *   Functions to work with listeners_group in hosts
+ *   Functions to work with listeners_group in nodes
  */
 #ifdef RPL_CONF_LEAF_ONLY
-
 mld6_listen_group_t *
 new_listener(uip_ipaddr_t *group_addr, uip_ipaddr_t *source, uip_ipaddr_t *preferred_parent)
 {
 	 mld6_listen_group_t *aux;
 	 int i;
-	 unsigned short mrd;
 
 	    for(i=0; i < MAX_NUM_OF_MCAST_LISTENING; i++)
 	    {
@@ -314,13 +291,11 @@ new_listener(uip_ipaddr_t *group_addr, uip_ipaddr_t *source, uip_ipaddr_t *prefe
 	            {
 	                memset(aux, 0, sizeof(mcast_group_t));
 	                aux->used = 1;
-	                aux->mld_flag = 1; /* We are the last host*/
+	                aux->mld_flag = 1; /* We are the last node*/
 	                aux->mcast_group = *group_addr;
 	                aux->source = *source;
 	                aux->preferred_parent = *preferred_parent;
-	                mrd=random_time(QUERY_RESPONSE_INTERVAL);
-	                PRINTF("Host group listener with delay %d \n",mrd);
-	                ctimer_set(&aux->delay_timer, mrd * CLOCK_SECOND, timer_host_expired , aux);
+	                ctimer_set(aux->delay_timer, QUERY_RESPONSE_INTERVAL, timer_node_expired , &aux);
 	                return aux;
 	            }
 	    }
@@ -351,8 +326,9 @@ int
 erase_listener (uip_ipaddr_t *group_addr, uip_ipaddr_t *source, uip_ipaddr_t *preferred_parent)
 {
       mld6_listen_group_t *aux;
+
       aux= find_listener(group_addr, source);
-      if (aux !=NULL)
+      if (aux!=NULL)
       {
         if(uip_ipaddr_cmp(&aux->preferred_parent, preferred_parent))
           {
@@ -364,12 +340,12 @@ erase_listener (uip_ipaddr_t *group_addr, uip_ipaddr_t *source, uip_ipaddr_t *pr
 }
 
 void
-print_mld_host_table()
+print_mld_node_table()
 {
     mld6_listen_group_t *aux;
     int i;
 
-    printf("Printing multicast host table\n");
+    printf("Printing multicast node table\n");
     for(i=0; i< MAX_NUM_OF_MCAST_LISTENING; i++)
     {
        aux= &listening_table[i];
@@ -398,21 +374,14 @@ mld_query_in()
     unsigned char *buffer;
     uint8_t buffer_length;
     int pos;
-    unsigned short mrd;
 
     buffer = UIP_ICMP_PAYLOAD;
     buffer_length = uip_len - uip_l3_icmp_hdr_len;
 
-    uip_len=0;
-
 #if UIP_CONF_ROUTER
       uip_len=0;
-      PRINTF("HANDLING MLD_QUERY IN A ROUTER\n");
-#endif /*UIP_CONF_ROUTER*/
-
-#if RPL_CONF_LEAF_ONLY
-      PRINTF("HANDLING MLD_QUERY IN A HOST\n");
-      if (buffer_length != 0)
+#else
+      if (buffer_length > 0)
       { /* Mcast address specific query*/
           pos = 0;
           memcpy(&group_addr, buffer, sizeof(uip_ipaddr_t));
@@ -432,7 +401,7 @@ mld_query_in()
           aux = find_listener(&group_addr, &source_addr);
 
           if (aux==NULL){
-                   PRINTF("host is not listening requested group in m-a-s query\n");
+                   PRINTF("Node is not listening requested group in m-a-s query\n");
           } else
             {
               if (uip_ipaddr_cmp(&aux->preferred_parent, &UIP_IP_BUF->srcipaddr))
@@ -440,23 +409,19 @@ mld_query_in()
                   if (aux->state == IDLE_LISTENER)
                   {
                            aux->state = DELAYING_LISTENER;
-                           ctimer_set(&aux->delay_timer, QUERY_RESPONSE_INTERVAL, timer_host_expired, aux);
+                           ctimer_set(aux->delay_timer, QUERY_RESPONSE_INTERVAL, timer_node_expired, aux);
                   } else
                     {
                           if (aux->state == DELAYING_LISTENER)
                           {
                               //TODO if (MRD < current time), but no need?
-                             ctimer_restart(&aux->delay_timer);
+                             ctimer_restart(aux->delay_timer);
                           }
                     }
               }
            }
       } else
           { //General query
-
-              PRINTF("Received MLD general query from ");
-              PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
-              PRINTF("\n");
               int i;
               for (i=0; i< MAX_NUM_OF_MCAST_LISTENING; i++)
               {
@@ -464,22 +429,21 @@ mld_query_in()
                       if (aux->used == 1)
                       {
                               aux->state = DELAYING_LISTENER;
-                              mrd=random_time(QUERY_RESPONSE_INTERVAL);
-                              PRINTF("Host group listener with delay %d \n",mrd);
-                              ctimer_set(&aux->delay_timer, mrd * CLOCK_SECOND, timer_host_expired , aux);
+                              ctimer_set(aux->delay_timer, random_time (QUERY_RESPONSE_INTERVAL), timer_node_expired , aux);
                       }
               }
           }
+
     uip_len = 0;
-#endif /*RPL_CONF_LEAF_ONLY*/
+#endif
 }
 
 void
 mld_report_in()
 {
-    uip_ipaddr_t group_addr, source, preferred_parent;
-    mld6_listen_group_t *aux_listener;
-    mcast_group_t *aux_mcast;
+    uip_ipaddr_t group_addr, source;
+    mld6_listen_group_t *aux;
+    mcast_group_t *auxi;
     unsigned char *buffer;
     uint8_t buffer_length;
     int pos;
@@ -492,97 +456,77 @@ mld_report_in()
     pos += sizeof(uip_ipaddr_t);
     memcpy(&source, buffer + pos, sizeof(uip_ipaddr_t));
     pos += sizeof(uip_ipaddr_t);
-    memcpy(&preferred_parent, buffer + pos, sizeof(uip_ipaddr_t));
-    pos += sizeof(uip_ipaddr_t);
 
     PRINTF("Received MLD report from ");
     PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
-    PRINTF("in host \n");
+    PRINTF("in node \n");
     PRINTF(" G = ");
     PRINT6ADDR(&group_addr);
     PRINTF(" Source = ");
     PRINT6ADDR(&source);
     PRINTF("\n");
 
-    uip_len=0;
-
 #if UIP_CONF_ROUTER
-      if(uip_ds6_is_my_addr(&preferred_parent))
+      auxi= mcast_group_find(&group_addr, &source);
+      if (aux == NULL)
+      { // Requested Group is not on the list of mcast group
+              PRINTF("Report discard, no mcast group in router\n");
+      }
+      else
       {
-            PRINTF("My router ip and the preferred parent are the same\n");
+                switch(aux->state)
+                {
+                   case NO_LISTENERS:
+                       // notify routing +
+                       aux->state = LISTENERS;
+                       ctimer_set(auxi->timer, QUERY_RESPONSE_INTERVAL, timer_group_expired , auxi);
+                       break;
+                   case LISTENERS:
+                       ctimer_reset(auxi->timer);
+                       break;
+                   case CHECKING_LISTENERS:
+                       aux->state = LISTENERS;
+                       ctimer_reset(auxi->timer);
+                       ctimer_stop(auxi->rtx_timer);
+                       break;
+                   default:
+                       PRINTF("Error in router's state getting report message\n");
+                       break;
+                }
+       }
 
-            aux_mcast = mcast_group_find(&group_addr, &source);
-            if (aux_mcast == NULL)
-            { // Requested Group is not on the list of mcast group
-                    PRINTF("Report discard, no mcast group in router\n");
-            }
-            else
-            {
-                      PRINTF("Group found \n");
-                      switch(aux_mcast->state)
-                      {
-                         case NO_LISTENERS:
-                             // notify routing +
-                             aux_mcast->state = LISTENERS;
-                             PRINTF("Timer group delay %d, no listeners\n", MCAST_LISTENER_INTERVAL);
-                             ctimer_set(&aux_mcast->timer,  MCAST_LISTENER_INTERVAL * CLOCK_SECOND, timer_group_expired , &aux_mcast);
-                             break;
-                         case LISTENERS:
-                             PRINTF("Timer group delay %d, listeners\n", MCAST_LISTENER_INTERVAL);
-                             ctimer_set(&aux_mcast->timer,  MCAST_LISTENER_INTERVAL * CLOCK_SECOND, timer_group_expired , &aux_mcast);
-                             break;
-                         case CHECKING_LISTENERS:
-                             aux_mcast->state = LISTENERS;
-                             ctimer_set(&aux_mcast->timer,  MCAST_LISTENER_INTERVAL * CLOCK_SECOND, timer_group_expired , &aux_mcast);
-                             ctimer_stop(&aux_mcast->rtx_timer);
-                             break;
-                         default:
-                             PRINTF("Error in router's state getting report message\n");
-                             break;
-                      }
-             }
-      } else PRINTF("Report with preferred parent not my router ip\n");
-
-#endif /*UIP_RPL_ROUTER*/
-
-#if RPL_CONF_LEAF_ONLY
-        PRINTF("REPORT in HOST \n");
-        aux_listener = find_listener(&group_addr, &source);
-	if (aux_listener->state == DELAYING_LISTENER)
+#else
+	aux = find_listener(&group_addr, &source);
+	if (aux->state == DELAYING_LISTENER)
 	{
-		if (aux_listener->used)
+		if (aux->used)
 		{
-			ctimer_stop(&aux_listener->delay_timer);
-			aux_listener->mld_flag = 0;  //Clear flag we were not the last host
-			aux_listener->state = IDLE_LISTENER;
+			ctimer_stop(aux->delay_timer);
+			aux->mld_flag = 0;  //Clear flag we were not the last node
+			aux->state = IDLE_LISTENER;
 		}
 	}
 
-#endif /*RPL_CONF_LEAF_ONLY*/
+#endif
     uip_len=0;
 }
 
 void mld_done_in()
 {
-        uip_ipaddr_t group_addr, source, preferred_parent;
+        uip_ipaddr_t group_addr, source;
         mcast_group_t *aux;
         unsigned char *buffer;
         uint8_t buffer_length;
         int pos;
-        uip_len = 0;
+
 #if UIP_CONF_ROUTER
-        buffer = UIP_ICMP_PAYLOAD;
-        pos = 0;
-        memcpy(&group_addr, buffer, sizeof(uip_ipaddr_t));
-        pos += sizeof(uip_ipaddr_t);
-        memcpy(&source, buffer + pos, sizeof(uip_ipaddr_t));
-        pos += sizeof(uip_ipaddr_t);
-        memcpy(&preferred_parent, buffer + pos, sizeof(uip_ipaddr_t));
-        pos += sizeof(uip_ipaddr_t);
 
-        if(uip_ds6_is_my_addr(&preferred_parent))
-        {
-
+                buffer = UIP_ICMP_PAYLOAD;
+                pos = 0;
+                memcpy(&group_addr, buffer, sizeof(uip_ipaddr_t));
+                pos += sizeof(uip_ipaddr_t);
+                memcpy(&source, buffer + pos, sizeof(uip_ipaddr_t));
+                pos += sizeof(uip_ipaddr_t);
 
                 PRINTF("Received MLD done from ");
                 PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
@@ -603,16 +547,14 @@ void mld_done_in()
                           {
                              case LISTENERS:
                                  aux->state = CHECKING_LISTENERS;
-                                 PRINTF("STATE CHECKING LISTENERS \n");
-                                 ctimer_set(&aux->timer, MCAST_LISTENER_INTERVAL * CLOCK_SECOND, timer_group_expired, aux);
-                                 ctimer_set(&aux->rtx_timer, LAST_LISTENER_QI * CLOCK_SECOND, rtxtimer_expired, aux);
+                                 ctimer_set(aux->timer, LAST_LISTENER_QI * ROBUSTNESS_VARIABLE, timer_group_expired, aux);
+                                 ctimer_set(aux->rtx_timer, LAST_LISTENER_QI, rtxtimer_expired, aux);
                                  break;
                              default:
                                  PRINTF("Error in router's state receiving mld_done\n");
                                  break;
                           }
                 }
-        }else printf("Done with other preferred_parent address\n");
 
 #endif
 
